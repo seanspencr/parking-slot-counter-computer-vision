@@ -1,2 +1,4 @@
 *.mp4
 dataset/*
+*.pkl
+dataset-v2/*

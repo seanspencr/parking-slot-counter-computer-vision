@@ -10,8 +10,8 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 
-positive_path = "./dataset/vehicles"
-negative_path = "./dataset/non-vehicles"   # FIX 1: separate paths
+positive_path = "./dataset-v2/vehicles"
+negative_path = "./dataset-v2/non-vehicles"   # FIX 1: separate paths
 
 def extract_hog(image):
     # Data is guaranteed 64x64x3 — no resize or shape check needed
@@ -56,17 +56,6 @@ model.fit(X_train, y_train)
 print(f"Train Accuracy: {model.score(X_train, y_train):.4f}")
 print(f"Test Accuracy : {model.score(X_test,  y_test):.4f}")
 
-# Learning curve
-# train_sizes, train_scores, val_scores = learning_curve(
-#     Pipeline([
-#         ('scaler', StandardScaler()),
-#         ('svm', LinearSVC(C=1.0, max_iter=5000, random_state=42))
-#     ]),
-#     X, y, cv=5,
-#     train_sizes=np.linspace(0.1, 1.0, 10),
-#     scoring='accuracy',
-#     n_jobs=-1
-# )
 
 with open("model.pkl", "wb") as f:
     pickle.dump(model, f)
