@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # ── Config ────────────────────────────────────────────────────────
 MASK_PATH  = './mask.jpg'
-CAMERA_SRC = "http://192.168.1.7:8080/video"                        # webcam; swap for RTSP URL
+CAMERA_SRC = "http://192.168.1.4:8080/video"                        # webcam; swap for RTSP URL
 MODEL_PATH = './model-v2.pkl'
 STEP       = 30
 
