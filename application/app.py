@@ -1,4 +1,9 @@
-import pickle, threading, time
+import os, pickle, threading, time
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 import numpy as np
 import cv2
 from skimage.feature import hog
@@ -8,8 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # ── Config ────────────────────────────────────────────────────────
 MASK_PATH  = './mask.jpg'
-CAMERA_SRC = "http://192.168.1.4:8080/video"                        # webcam; swap for RTSP URL
-MODEL_PATH = './model-v2.pkl'
+CAMERA_SRC = os.getenv("CAMERA_SRC", "D:\\Kuliah\\Semester4\\comvis\\aol\parking-slot-counter-computer-vision\\parking_1920_1080_loop.mp4")
+# CAMERA_SRC = "D:\\Kuliah\\Semester4\\comvis\\aol\parking-slot-counter-computer-vision\\parking_1920_1080_loop.mp4"                        # webcam; swap for RTSP URL
+MODEL_PATH = './model-final.pkl'
 STEP       = 30
 
 EMPTY     = True

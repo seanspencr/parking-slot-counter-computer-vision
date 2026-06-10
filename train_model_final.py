@@ -5,13 +5,16 @@ from sklearn.svm import LinearSVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 import cv2
 import os
 import pickle
+import matplotlib.pyplot as plt
+import random
 
 # ── Paths ─────────────────────────────────────────────────────────
-positive_path = "./dataset-v2/vehicles"
-negative_path = "./dataset-v2/non-vehicles"
+positive_path = "./dataset/vehicles"
+negative_path = "./dataset/non-vehicles"
 
 # ── HOG extraction ────────────────────────────────────────────────
 def extract_hog(image):
@@ -133,3 +136,73 @@ with open("model-v2.pkl", "wb") as f:
     pickle.dump(model, f)
 
 print("\nModel saved to model-v2.pkl")
+
+# ── Evaluation ────────────────────────────────────────────────────
+print("\nEvaluating on test set...")
+y_pred = model.predict(X_test)
+print("Classification Report:")
+print(classification_report(y_test, y_pred, target_names=["Non-Vehicle", "Vehicle"]))
+
+# Plot Confusion Matrix
+cm = confusion_matrix(y_test, y_pred)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Non-Vehicle", "Vehicle"])
+disp.plot(cmap=plt.cm.Blues)
+plt.title("Confusion Matrix")
+plt.savefig("confusion_matrix.png")
+print("Confusion matrix saved to confusion_matrix.png")
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+
+# ── Sample Predictions ─────────────────────────────────────────────
+print("\nRunning sample predictions...")
+sample_images = []
+sample_labels = []
+
+# Get some random positives
+pos_files = [f for f in os.listdir(positive_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+if pos_files:
+    for _ in range(3):
+        f = random.choice(pos_files)
+        img = cv2.imread(os.path.join(positive_path, f))
+        if img is not None:
+            if img.shape[:2] != (64, 64):
+                img = cv2.resize(img, (64, 64))
+            sample_images.append(img)
+            sample_labels.append(1)
+
+# Get some random negatives
+neg_files = [f for f in os.listdir(negative_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+if neg_files:
+    for _ in range(3):
+        f = random.choice(neg_files)
+        img = cv2.imread(os.path.join(negative_path, f))
+        if img is not None:
+            if img.shape[:2] != (64, 64):
+                img = cv2.resize(img, (64, 64))
+            sample_images.append(img)
+            sample_labels.append(0)
+
+if sample_images:
+    fig, axes = plt.subplots(2, 3, figsize=(10, 7))
+    for i, ax in enumerate(axes.flat):
+        if i < len(sample_images):
+            img = sample_images[i]
+            true_label = "Vehicle" if sample_labels[i] == 1 else "Non-Vehicle"
+            
+            # Predict
+            feat = extract_hog(img).reshape(1, -1)
+            pred = model.predict(feat)[0]
+            pred_label = "Vehicle" if pred == 1 else "Non-Vehicle"
+            
+            # Convert BGR to RGB for matplotlib
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            ax.imshow(img_rgb)
+            ax.set_title(f"True: {true_label}\nPred: {pred_label}", 
+                        color="green" if true_label == pred_label else "red")
+            ax.axis('off')
+    
+    plt.tight_layout()
+    plt.savefig("sample_predictions.png")
+    print("Sample predictions saved to sample_predictions.png")
+    plt.show()

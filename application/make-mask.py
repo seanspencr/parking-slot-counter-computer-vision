@@ -1,5 +1,10 @@
 import cv2 as cv
 import numpy as np
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 EVENT_MOUSEMOVE = 0
 EVENT_LBUTTONDOWN = 1
@@ -81,10 +86,13 @@ def sliderCallback(num):
     print(f"My Custom Callback {num}")
 
 
+
+CAMERA_SRC= os.getenv("CAMERA_SRC")
+
 if (__name__ == "__main__"):
     
     cv.namedWindow(window_name)
-    cap = cv.VideoCapture("../parking_1920_1080_loop.mp4")
+    cap = cv.VideoCapture(CAMERA_SRC)
     
     # Add a slider
     cv.createTrackbar("slider_name", window_name, 0, 100, sliderCallback)
