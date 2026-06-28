@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # ── Config ────────────────────────────────────────────────────────
 MASK_PATH  = './mask.jpg'
-CAMERA_SRC = os.getenv("CAMERA_SRC", "D:\\Kuliah\\Semester4\\comvis\\aol\parking-slot-counter-computer-vision\\parking_1920_1080_loop.mp4")
+CAMERA_SRC = os.getenv("CAMERA_SRC", "dummy-video.mp4")
 # CAMERA_SRC = "D:\\Kuliah\\Semester4\\comvis\\aol\parking-slot-counter-computer-vision\\parking_1920_1080_loop.mp4"                        # webcam; swap for RTSP URL
 MODEL_PATH = './model-final.pkl'
 STEP       = 30
@@ -68,12 +68,37 @@ def camera_loop():
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open camera: {CAMERA_SRC}")
 
+    # Buffer the entire video into memory once
+    frame_buffer = []
     while True:
         ret, frame = cap.read()
         if not ret:
-            # For webcam/live stream, retry instead of rewinding
-            time.sleep(0.1)
-            continue
+            break
+        frame_buffer.append(frame)
+    cap.release()
+
+    if len(frame_buffer) == 0:
+        raise RuntimeError(f"No frames read from source: {CAMERA_SRC}")
+
+    direction = 1  # 1 = forward, -1 = backward
+    buffer_index = 0
+
+    SLOWDOWN_FACTOR = 2  # 2 = 50% speed
+    repeat_count = 0
+
+    while True:
+        if repeat_count == 0:
+            buffer_index += direction
+
+            if buffer_index >= len(frame_buffer):
+                direction = -1
+                buffer_index = len(frame_buffer) - 1
+            elif buffer_index < 0:
+                direction = 1
+                buffer_index = 0
+
+        repeat_count = (repeat_count + 1) % SLOWDOWN_FACTOR
+        frame = frame_buffer[buffer_index].copy()
 
         if frame_nmr % STEP == 0 and previous_frame is not None:
             diffs = []
@@ -105,7 +130,7 @@ def camera_loop():
                 shared_state["last_update"] = time.time()
 
 
-        # upudatae latest frame
+        # update latest frame
         for spot_indx, (x1, y1, w, h) in enumerate(spots):
             status = spots_status[spot_indx]
             color  = (0, 255, 0) if status else (0, 0, 255)
@@ -117,7 +142,7 @@ def camera_loop():
                     f'Available spots: {available} / {len(spots)}',
                     (100, 60), cv2.FONT_HERSHEY_SIMPLEX,
                     1, (255, 255, 255), 2)
-        
+
 
         _, jpeg = cv2.imencode('.jpg', frame)
         with frame_lock:

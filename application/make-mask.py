@@ -87,21 +87,51 @@ def sliderCallback(num):
 
 
 
+
 CAMERA_SRC= os.getenv("CAMERA_SRC")
+
 
 if (__name__ == "__main__"):
     
     cv.namedWindow(window_name)
+    
     cap = cv.VideoCapture(CAMERA_SRC)
     
-    # Add a slider
-    cv.createTrackbar("slider_name", window_name, 0, 100, sliderCallback)
-    cv.setMouseCallback(window_name, drawHandler.mouseCallback)
-    
+    # First, buffer the entire video into memory
+    frame_buffer = []
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+        frame_buffer.append(frame)
+    cap.release()
+    
+    if len(frame_buffer) == 0:
+        print("No frames read from video source.")
+        exit()
+    
+    direction = 1  # 1 = forward, -1 = backward
+    buffer_index = 0
+    
+    SLOWDOWN_FACTOR = 2  # 2 = 50% speed, 3 = 33% speed, etc.
+    repeat_count = 0
+
+    cv.createTrackbar("slider_name", window_name, 0, 100, sliderCallback)
+    cv.setMouseCallback(window_name, drawHandler.mouseCallback)
+    
+    while True:
+        if repeat_count == 0:
+            buffer_index += direction
+            
+            if buffer_index >= len(frame_buffer):
+                direction = -1
+                buffer_index = len(frame_buffer) - 1
+            elif buffer_index < 0:
+                direction = 1
+                buffer_index = 0
+        
+        repeat_count = (repeat_count + 1) % SLOWDOWN_FACTOR
+        frame = frame_buffer[buffer_index].copy()
         
         drawHandler.setFrame(frame)
         
@@ -110,20 +140,18 @@ if (__name__ == "__main__"):
             pt2 = (pin.x + pin.width, pin.y + pin.height)
             cv.rectangle(frame, pt1, pt2, (0, 255, 0), 2)
         
-        
         cv.putText(frame, "Press 'q' to quit, 'z' to undo, 'c' to clear, 's' to save mask", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv.imshow(window_name, frame)
         
         key = cv.waitKey(1) & 0xFF
         if key == ord('q'):
             break
-        elif key == ord('z'):  # Undo last pin
+        elif key == ord('z'):
             drawHandler.drawnPins = drawHandler.drawnPins[:-1]
-        elif key == ord('c'):  # Clear pins
+        elif key == ord('c'):
             drawHandler.drawnPins = []
-        elif key == ord('s'):  # Save pins
+        elif key == ord('s'):
             drawHandler.savePins("mask.jpg")
             break
     
-    cap.release()
     cv.destroyAllWindows()
