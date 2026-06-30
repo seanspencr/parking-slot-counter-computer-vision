@@ -51,7 +51,6 @@ def calc_diff(im1, im2):
 
 # ── Background camera thread ──────────────────────────────────────
 def camera_loop():
-
     global latest_frame
 
     mask = cv2.imread(MASK_PATH, 0)
@@ -64,92 +63,65 @@ def camera_loop():
     previous_frame = None
     frame_nmr = 0
 
-    cap = cv2.VideoCapture(CAMERA_SRC)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open camera: {CAMERA_SRC}")
+    while True:  # outer loop = replay video forever
+        cap = cv2.VideoCapture(CAMERA_SRC)
+        if not cap.isOpened():
+            raise RuntimeError(f"Cannot open camera: {CAMERA_SRC}")
 
-    # Buffer the entire video into memory once
-    frame_buffer = []
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame_buffer.append(frame)
-    cap.release()
+        while True:  # inner loop = read frames
+            ret, frame = cap.read()
+            if not ret:
+                break  # end of video → outer loop reopens it
 
-    if len(frame_buffer) == 0:
-        raise RuntimeError(f"No frames read from source: {CAMERA_SRC}")
+            if frame_nmr % STEP == 0 and previous_frame is not None:
+                diffs = []
+                crops = {}
+                for i, (x1, y1, w, h) in enumerate(spots):
+                    crop = frame[y1:y1+h, x1:x1+w]
+                    prev = previous_frame[y1:y1+h, x1:x1+w]
+                    diffs.append(calc_diff(crop, prev))
+                    crops[i] = crop
 
-    direction = 1  # 1 = forward, -1 = backward
-    buffer_index = 0
+                max_diff = np.amax(diffs)
+                changed = ([j for j in np.argsort(diffs)
+                            if diffs[j] / max_diff > 0.4]
+                           if max_diff > 0 else [])
 
-    SLOWDOWN_FACTOR = 2  # 2 = 50% speed
-    repeat_count = 0
+                for i in changed:
+                    spots_status[i] = empty_or_not(crops[i])
 
-    while True:
-        if repeat_count == 0:
-            buffer_index += direction
+            elif frame_nmr % STEP == 0 and previous_frame is None:
+                for i, (x1, y1, w, h) in enumerate(spots):
+                    spots_status[i] = empty_or_not(frame[y1:y1+h, x1:x1+w])
 
-            if buffer_index >= len(frame_buffer):
-                direction = -1
-                buffer_index = len(frame_buffer) - 1
-            elif buffer_index < 0:
-                direction = 1
-                buffer_index = 0
+            if frame_nmr % STEP == 0:
+                previous_frame = frame.copy()
+                available = sum(1 for s in spots_status if s is True)
+                with state_lock:
+                    shared_state["available"]   = available
+                    shared_state["total"]       = len(spots)
+                    shared_state["last_update"] = time.time()
 
-        repeat_count = (repeat_count + 1) % SLOWDOWN_FACTOR
-        frame = frame_buffer[buffer_index].copy()
+            for spot_indx, (x1, y1, w, h) in enumerate(spots):
+                status = spots_status[spot_indx]
+                color  = (0, 255, 0) if status else (0, 0, 255)
+                cv2.rectangle(frame, (x1, y1), (x1+w, y1+h), color, 2)
 
-        if frame_nmr % STEP == 0 and previous_frame is not None:
-            diffs = []
-            crops = {}
-            for i, (x1, y1, w, h) in enumerate(spots):
-                crop = frame[y1:y1+h, x1:x1+w]
-                prev = previous_frame[y1:y1+h, x1:x1+w]
-                diffs.append(calc_diff(crop, prev))
-                crops[i] = crop
-
-            max_diff = np.amax(diffs)
-            changed = ([j for j in np.argsort(diffs)
-                        if diffs[j] / max_diff > 0.4]
-                       if max_diff > 0 else [])
-
-            for i in changed:
-                spots_status[i] = empty_or_not(crops[i])
-
-        elif frame_nmr % STEP == 0 and previous_frame is None:
-            for i, (x1, y1, w, h) in enumerate(spots):
-                spots_status[i] = empty_or_not(frame[y1:y1+h, x1:x1+w])
-
-        if frame_nmr % STEP == 0:
-            previous_frame = frame.copy()
             available = sum(1 for s in spots_status if s is True)
-            with state_lock:
-                shared_state["available"]   = available
-                shared_state["total"]       = len(spots)
-                shared_state["last_update"] = time.time()
+            cv2.rectangle(frame, (80, 20), (550, 80), (0, 0, 0), -1)
+            cv2.putText(frame,
+                        f'Available spots: {available} / {len(spots)}',
+                        (100, 60), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (255, 255, 255), 2)
 
+            _, jpeg = cv2.imencode('.jpg', frame)
+            with frame_lock:
+                latest_frame = jpeg.tobytes()
 
-        # update latest frame
-        for spot_indx, (x1, y1, w, h) in enumerate(spots):
-            status = spots_status[spot_indx]
-            color  = (0, 255, 0) if status else (0, 0, 255)
-            cv2.rectangle(frame, (x1, y1), (x1+w, y1+h), color, 2)
+            frame_nmr += 1
+            time.sleep(0.03)  # move sleep here, not in generate_frames
 
-        available = sum(1 for s in spots_status if s is True)
-        cv2.rectangle(frame, (80, 20), (550, 80), (0, 0, 0), -1)
-        cv2.putText(frame,
-                    f'Available spots: {available} / {len(spots)}',
-                    (100, 60), cv2.FONT_HERSHEY_SIMPLEX,
-                    1, (255, 255, 255), 2)
-
-
-        _, jpeg = cv2.imencode('.jpg', frame)
-        with frame_lock:
-            latest_frame = jpeg.tobytes()
-
-        frame_nmr += 1
-
+        cap.release()  # clean up before reopening
 
 def generate_frames():
     while True:
